@@ -1,0 +1,48 @@
+const hubspot = require('@hubspot/api-client');
+  
+exports.main = async (event, callback) => {
+  
+  // parent company id (must be in input field)
+  const par_co_id = event.inputFields['hs_parent_company_id'];
+  
+  // hubspot api client
+  const hubspotClient = new hubspot.Client({
+    accessToken: process.env.PARENT_COMP_ASSOC_KEY
+  });
+
+  // api call to get parent co info
+  const apiPath = '/crm/v3/objects/companies/' + par_co_id + '?properties=address%2Caddress2%2Ccity%2Cstate%2Czip%2Ccountry%2Cname&archived=false';
+  /*****
+  NOTE:
+    can add additional properties to the apiPath by adding '%2Cproperty_internal_name' before '&archived=false'
+  *****/
+  
+    const getParentCo = await hubspotClient.apiRequest({
+    method: 'GET',
+    path: apiPath
+   });
+  
+  const parJSON = await getParentCo.json();
+  
+  console.log(parJSON);
+  
+  const par_co_address = parJSON.properties.address2 ? parJSON.properties.address + ', ' + parJSON.properties.address2 : parJSON.properties.address;
+  const par_co_city = parJSON.properties.city;
+  const par_co_country = parJSON.properties.country;
+  const par_co_name = parJSON.properties.name;
+  const par_co_state = parJSON.properties.state;
+  const par_co_zip = parJSON.properties.zip;
+  
+  // add any more properties you might need here and in the outputFields JSON
+  
+  callback({
+    outputFields: {
+      parent_company_address: par_co_address,
+      parent_company_city: par_co_city,
+      parent_company_country: par_co_country,
+      parent_company_name: par_co_name,
+      parent_company_state: par_co_state,
+      parent_company_zip: par_co_zip
+    }
+  });
+}
