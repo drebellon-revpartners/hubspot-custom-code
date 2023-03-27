@@ -7,7 +7,7 @@ exports.main = async (event, callback) => {
   
   // hubspot api client
   const hubspotClient = new hubspot.Client({
-    accessToken: process.env.PARENT_COMP_ASSOC_KEY
+    accessToken: process.env.YOUR_SECRET_KEY
   });
 
   // api call to get parent co info
