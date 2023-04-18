@@ -1,0 +1,93 @@
+const hubspot = require('@hubspot/api-client');
+  
+exports.main = async (event, callback) => {  
+  // Set up variables to be used
+  // parent company id (must be in input field)
+  let par_co_id = event.inputFields['hs_parent_company_id'];
+  let deletedCompanyAssociations = [];
+  let companyId = event.object.objectId;
+  
+  console.log("Parent Company ID is: " + par_co_id);
+  
+  // hubspot api client
+  const hubspotClient = new hubspot.Client({
+    accessToken: process.env.assoc_remove_key
+  });
+
+  // api call to delete parent/child association
+  /**
+  Company-to-company associations schema
+  {
+    "results": [
+      {
+        "category": "HUBSPOT_DEFINED",
+        "typeId": 13,
+        "label": "Child Company"
+      },
+      {
+        "category": "HUBSPOT_DEFINED",
+        "typeId": 14,
+        "label": "Parent Company"
+      }
+    ]
+  }
+  **/
+  
+  
+  // API call to delete parent/child association
+  if( par_co_id == undefined ) {
+    console.log("Company enrolled is the Parent Company.");
+    
+    // API call to find assoc company
+    var findChildIdPath = '/crm/v4/objects/company/' + companyId + '/associations/company?limit=100';
+    let findChildId = await hubspotClient.apiRequest({
+      method: 'GET',
+      path: findChildIdPath
+    });
+    
+    let findChildIdJSON = await findChildId.json();
+    console.log('Associated Companies: \n' + findChildIdJSON);
+    
+
+    // API call to delete Child Companies
+    if (findChildIdJSON.results.length > 0) {
+      for ( var i = 0 ; i < findChildIdJSON.results.length; i++) {
+        let new_par_co = findChildIdJSON.results[i].toObjectId;
+        
+        console.log("Set par_co_id to: " + new_par_co);
+        
+        var deleteChildCompanyPath = '/crm/v4/objects/company/' + companyId + '/associations/company/' + new_par_co; // '/crm/v4/objects/company/' + new_par_co + '/associations/company/' + companyId;
+        let deleteChiCo = await hubspotClient.apiRequest({
+          method: 'DELETE',
+          path: deleteChildCompanyPath
+        });
+        let deleteChiCoJSON = await deleteChiCo;
+
+        console.log(deleteChiCoJSON);
+      }
+    }
+  }
+  else {
+    console.log("Company enrolled is the Child Company.");
+    var deleteParentCompanyPath = '/crm/v4/objects/company/' + companyId + '/associations/company/' + par_co_id;
+    let deleteParCo = await hubspotClient.apiRequest({
+      method: 'DELETE',
+      path: deleteParentCompanyPath
+    });
+    
+    let deleteParCoJSON = await deleteParCo;
+    
+    console.log(deleteParCoJSON);
+    
+  }
+  
+  deletedCompanyAssociations.push(companyId);
+  console.log("Deleted company's parent/child assoc.: " + companyId);
+  
+  // add any more properties you might need here and in the outputFields JSON
+  callback({
+    outputFields: {
+      companies_with_removed_assocs: deletedCompanyAssociations
+    }
+  });
+}
