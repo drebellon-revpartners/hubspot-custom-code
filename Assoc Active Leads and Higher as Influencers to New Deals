@@ -1,0 +1,226 @@
+const hubspot = require('@hubspot/api-client');
+
+
+exports.main = async (event, callback) => {
+  // Set variables for iteration
+  const create_less90 = new Date(event.inputFields['create_less90']);
+  console.log(create_less90)
+  let influencers = [];
+  let deal_contacts = [];
+  
+  // instantiate hubspot api client
+  const hubspotClient = new hubspot.Client({
+    accessToken: process.env.assoc_remove_key
+  });
+  
+  
+  // api call to get deal's contacts
+  var dealContactsPath = '/crm/v4/objects/deal/' + event.object.objectId + '/associations/contact?limit=500';
+  
+  const dealContacts = await hubspotClient.apiRequest({
+    method: 'GET',
+    path: dealContactsPath
+   });
+  
+  
+  const dealContactsJSON = await dealContacts.json();
+  console.log('# Assoc Contacts: ' + (dealContactsJSON.results.length));
+  
+  // loop through Deals contacts
+  if (dealContactsJSON.results.length > 0) {
+    for (var a = 0; a < dealContactsJSON.results.length; a++){
+        deal_contacts.push(dealContactsJSON.results[a].toObjectId);
+      
+      // loop through each association label
+/*      for ( var b = 0; b < dealContactsJSON.results[a].associationTypes.length; b++){
+        console.log(dealContactsJSON.results[a].associationTypes[b]);
+        
+        
+        // if decision maker label add contact ID to deal_contacts list to check against later
+        if ( dealContactsJSON.results[a].associationTypes[b].typeId == 7 ){
+          deal_contacts.push(dealContactsJSON.results[a].toObjectId);
+        }
+      } */
+    }
+  }
+  
+  // api call to get company associations
+  var associationAPIpath = '/crm/v4/objects/deal/' + event.object.objectId + '/associations/company?limit=500';
+  
+  const associationAPIresponse = await hubspotClient.apiRequest({
+    method: 'GET',
+    path: associationAPIpath
+   });
+  
+  const associationJSON = await associationAPIresponse.json();
+  
+  console.log('# of Assoc. Companies: ' + associationJSON.results.length);
+  
+   // loop through Associated Companies to get Assoc. Contacts
+  if  (associationJSON.results.length > 0) {
+	for (var i = 0; i < associationJSON.results.length; i++) {
+      
+      let companyId = associationJSON.results[i].toObjectId;
+      
+      // API for Assoc. contacts
+      var assocContactsApiPath = '/crm/v4/objects/company/' + companyId + '/associations/contacts?limit=500';
+      console.log('Assoc Company ID: ' + companyId );
+      
+      const assocContacts = await hubspotClient.apiRequest({
+        method: 'GET',
+        path: assocContactsApiPath
+      });
+      
+      const assocContactsJSON = await assocContacts.json();
+      
+      console.log('# of Assoc. Contacts: ' + assocContactsJSON.results.length);
+      
+      
+      // loop through company's associated contacts
+      if (assocContactsJSON.results.length > 0) {
+        for (var j = 0; j < assocContactsJSON.results.length; j++) {
+          
+          console.log('Contact iteration # ' + (j+1));
+          
+          let contactId = assocContactsJSON.results[j].toObjectId;
+          
+          if ( deal_contacts.includes(contactId) ) {
+            console.log('Contact ' + contactId + ' is decision maker.');
+          }
+          else {
+            console.log('Contact ' + contactId + ' is not decision maker');
+            // API call to get Contact Properties
+            var contactPropApiPath = '/crm/v3/objects/contacts/' + contactId +
+                '?properties=became_an_active_lead_date%2Chs_lifecyclestage_marketingqualifiedlead_date%2Chs_lifecyclestage_salesqualifiedlead_date%2Cbecame_a_sales_accepted_lead&archived=false';
+
+            const contactProp = await hubspotClient.apiRequest({
+              method: 'GET',
+              path: contactPropApiPath
+            });
+
+            const contactPropJSON = await contactProp.json();
+
+
+
+            // Check if entered ___ dates are within the 90 days of deal creation.
+            // if they are, then create association with 'influencer' label to deal
+             /*
+            Association Type for Influencer (contact to deal):
+              {
+                "category": "USER_DEFINED",
+                "typeId": 10, 				// for deal to contact assocs use 9
+                "label": "Influencer"
+              }
+
+            */
+            if ( contactPropJSON.properties.became_a_sales_accepted_lead != null) {
+              var became_sales_accepted = new Date(contactPropJSON.properties.became_a_sales_accepted_lead); // create date variable if not null to avoid pulling today's date
+
+              console.log(contactPropJSON);
+              console.log('became SAL not null');
+              console.log('became SAL: ' + became_sales_accepted);
+              console.log('create90: ' + create_less90);
+
+              if (became_sales_accepted >= create_less90 ){
+                console.log('sales within 90 days');
+
+                // API call to associate
+                await hubspotClient.crm.contacts.associationsApi.create(
+                    contactPropJSON.id,
+                    'deals',
+                    event.object.objectId,
+                    [
+                        {
+                              "associationCategory": "USER_DEFINED",
+                              "associationTypeId": 10 
+                        }
+                    ]
+                );
+                /**
+                var assocContactInfluencerPath = '/crm/v4/objects/contact/' + contactPropJSON.id + '/associations/deal/' + event.object.objectId ;
+                const assocContactInfluencer  = await hubspotClient.apiRequest({
+                  method: 'PUT',
+                  path : assocContactInfluencerPath,
+                  body : {
+                      "associationCategory": "USER_DEFINED",
+                      "associationTypeId": 10
+                  }
+                });
+                **/
+
+
+                influencers.push(contactPropJSON.id);
+              }
+            }
+            else if ( contactPropJSON.properties.hs_lifecyclestage_salesqualifiedlead_date != null ) {
+              var became_sql = new Date(contactPropJSON.properties.hs_lifecyclestage_salesqualifiedlead_date);
+              if ( became_sql >= create_less90 ) {
+                console.log('SQL date known');
+                // API call to associate
+                await hubspotClient.crm.contacts.associationsApi.create(
+                    contactPropJSON.id,
+                    'deals',
+                    event.object.objectId,
+                    [
+                        {
+                              "associationCategory": "USER_DEFINED",
+                              "associationTypeId": 10 
+                        }
+                    ]
+                );
+                influencers.push(contactPropJSON.id);
+              }
+            }
+            else if ( contactPropJSON.properties.hs_lifecyclestage_marketingqualifiedlead_date != null ) {
+              var became_mql = new Date(contactPropJSON.properties.hs_lifecyclestage_marketingqualifiedlead_date);
+              if (became_mql >= create_less90 ) {
+                console.log('mql known');
+                // API call to associate
+                await hubspotClient.crm.contacts.associationsApi.create(
+                    contactPropJSON.id,
+                    'deals',
+                    event.object.objectId,
+                    [
+                        {
+                              "associationCategory": "USER_DEFINED",
+                              "associationTypeId": 10 
+                        }
+                    ]
+                  );
+                influencers.push(contactPropJSON.id);
+              }
+            }
+            else if ( contactPropJSON.properties.became_an_active_lead_date != null ) {
+              var became_active_lead = new Date(contactPropJSON.properties.became_an_active_lead_date);
+              if( became_active_lead >= create_less90 ) {
+                console.log('active lead known');
+                // API call to associate
+                await hubspotClient.crm.contacts.associationsApi.create(
+                    contactPropJSON.id,
+                    'deals',
+                    event.object.objectId,
+                    [
+                        {
+                              "associationCategory": "USER_DEFINED",
+                              "associationTypeId": 10 
+                        }
+                    ]
+                  );
+                influencers.push(contactPropJSON.id);
+              }
+            }
+          }
+        }        
+      }
+    }
+  }
+
+
+  callback({
+    outputFields: {
+      'create_less90': create_less90,
+      'influencers': influencers,
+      'deal contacts': deal_contacts
+    }
+  });
+}
