@@ -1,0 +1,100 @@
+const hubspot = require('@hubspot/api-client');
+  
+exports.main = async (event, callback) => {  
+  // Set up variables to be used
+  // parent company id (must be in input field)
+  let zift_par = event.inputFields['zift_parent_id'];     // property used to identify parent company
+  let CompanyAssociations = [];
+  let companyId = event.object.objectId;
+  
+  console.log("Zift Parent ID is: " + zift_par);
+  
+  // hubspot api client
+  const hubspotClient = new hubspot.Client({
+    accessToken: process.env.COMPANY_API
+  });
+
+  /**
+  Company-to-company associations schema
+  {
+    "results": [
+      {
+        "category": "HUBSPOT_DEFINED",
+        "typeId": 13,
+        "label": "Child Company"
+      },
+      {
+        "category": "HUBSPOT_DEFINED",
+        "typeId": 14,
+        "label": "Parent Company"
+      }
+    ]
+  }
+  **/
+  
+  // API search call to search for Parent Company
+  var zParPath = '/crm/v3/objects/companies/search';
+  
+  let zPar = await hubspotClient.apiRequest({
+    method: 'POST',
+    path: zParPath,
+    body: {
+      "filterGroups": [
+        {
+          "filters": [
+            {
+              "value": zift_par,
+              "propertyName": "zift_end_customer_partner_id",
+              "operator": "EQ"
+            },
+            {
+              "propertyName": "zift_end_customer_id",       // property used to verify it's the parent co
+              "operator": "NOT_HAS_PROPERTY"
+            }
+          ]
+        }
+      ],
+      "sorts": ["zift_end_customer_partner_id"],
+      "query": "",
+      "properties": [
+        "zift_end_customer_partner_id",
+        "zift_end_customer_id",
+        "hs_object_id"        
+      ],
+      "limit": 1,
+      "after": 0
+    }
+  });
+  
+  let zParJSON = await zPar.json();
+  
+  console.log(zParJSON);
+  
+  // Store HS Record of parent company
+  let par_co_id = zParJSON.results[0].id;
+  
+  // API call to add parent/child association
+  
+  await hubspotClient.crm.companies.associationsApi.create(
+                    companyId,
+                    'companies',
+                    par_co_id,
+                    [
+                        {
+                              "associationCategory": "HUBSPOT_DEFINED",
+                              "associationTypeId": 14 
+                        }
+                    ]
+                );
+ 
+  CompanyAssociations.push(companyId);
+  console.log("Added company's parent/child assoc.: " + companyId);
+ 
+ 
+  // add any more properties you might need here and in the outputFields JSON
+  callback({
+    outputFields: {
+      companies_assocd: CompanyAssociations
+    }
+  });
+}
