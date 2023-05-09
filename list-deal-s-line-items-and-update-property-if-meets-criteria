@@ -1,0 +1,71 @@
+const hubspot = require('@hubspot/api-client');
+  
+exports.main = async (event, callback) => {
+  
+  // variables
+  const deal_id = event.inputFields['deal_id'];
+  let one_time_li = [];
+  
+  // hubspot api client instantiate
+  const hubspotClient = new hubspot.Client({
+    accessToken: process.env.DEAL_AND_LINE_ITEMS
+  });
+	
+  
+  // api to list all line items
+  var listLiApiPath = '/crm/v4/objects/deal/' + deal_id + '/associations/line_item?limit=500';
+  const listLiApi = await hubspotClient.apiRequest({
+    method: 'GET',
+    path: listLiApiPath
+  });
+  
+  const listLiApiJSON = await listLiApi.json();
+  
+  
+  // loop through line items to filter for only the one-time
+  if  (listLiApiJSON.results.length > 0) {
+	for (var i = 0; i < listLiApiJSON.results.length; i++) {
+      console.log(i);
+      let line_item_id = listLiApiJSON.results[i].toObjectId;
+      
+    
+      // api call to get line item properties
+      var liPropertiesApiPath = '/crm/v3/objects/line_items/' + line_item_id + '?properties=recurringbillingfrequency%2Crevenue_line&archived=false';
+      const liPropertiesApi = await hubspotClient.apiRequest({
+        method: 'GET',
+        path: liPropertiesApiPath
+      });
+      
+      const liPropertiesApiJSON = await liPropertiesApi.json();
+      
+      // add record to one_time_li list if it is one-time and revenue_line isn't populated
+      if (liPropertiesApiJSON.properties.recurringbillingfrequency == null && liPropertiesApiJSON.properties.revenue_line != 'NRR') {
+              one_time_li.push(line_item_id);
+      }
+	}
+  }
+  
+  console.log(one_time_li)
+  
+  // api to update one-time line items' revenue_line property
+  for (const j in one_time_li) {
+    let line_item_id = one_time_li[j];
+    
+    var updateRevenueLinePath = '/crm/v3/objects/line_items/' + line_item_id;
+    const updateRevenueLine = await hubspotClient.apiRequest({
+      method: 'PATCH',
+      path: updateRevenueLinePath,
+      body: {
+        properties: {
+        "revenue_line" : "NRR"
+        }
+      }
+    });
+    console.log('Line Item "' + line_item_id + '" had revenue_line updated to NRR')
+  }
+  
+  callback({
+    outputFields: {
+    }
+  });
+}
