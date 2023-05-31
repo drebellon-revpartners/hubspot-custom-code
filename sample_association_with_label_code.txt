@@ -1,0 +1,57 @@
+/** 
+Super Simple Association Label Sample 
+
+You can use this snippet to associate objects with a custom assocition label.
+
+There will be sections in this code that you will need to edit. These will be in all caps and have a comment next to them.
+**/
+
+// import the hubspot api client
+const hubspot = require('@hubspot/api-client');
+
+// main function starts here
+exports.main = async (event, callback) => {
+  
+  //instantiate hubspot api client
+  const hubspotClient = new hubspot.Client({
+    accessToken: process.env.YOUR_SECRET_KEY // <-- update with your secret key variable name. Found above the code section in the "Secrets" drop-down area on the hubspot interface.
+  });
+  
+  // API call to associate
+  /*
+  NOTE: this might look different depending on what two objects you're associating.
+  
+  The associationCategory and associationTypeId can be found using the "Read" api call under "Association Schema Endpoints" on this page: https://developers.hubspot.com/docs/api/crm/associations
+  
+  The code will look something like this:
+  await hubspotClient.crm.FROM_OBJECT.associationsApi.create(
+    FROM_OBJECT_ID, // <-- should be a number
+    'TO_OBJECT_TYPE', // <-- should be a string
+    TO_OBJECT_ID, // <-- should be a number
+    [
+      {
+        "associationCategory": "USER_DEFINED", 
+        "associationTypeId": 10
+      }
+    ]
+  );
+  */
+  await hubspotClient.crm.contacts.associationsApi.create(
+    123456789,
+    'companies',
+    987654321,
+    [
+      {
+        "associationCategory": "USER_DEFINED",
+        "associationTypeId": 8 
+      }
+    ]
+  );
+  
+  // you can define output fields within the JSON. These can be used in the rest of the workflow, but might not be necessary for your case.
+  callback({
+    outputFields: {
+      "OUTPUT_LABEL": "OUTPUT_VALUE" // <-- update with your label and value. Values can be variables within the code above
+    }
+  });
+}
