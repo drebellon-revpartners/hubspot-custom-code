@@ -1,0 +1,122 @@
+// import the hubspot api client
+const hubspot = require('@hubspot/api-client');
+
+// main function starts here
+exports.main = async (event, callback) => {
+  // function for delay between api calls
+  function pause(milliseconds) {
+	var dt = new Date();
+	while ((new Date()) - dt <= milliseconds) { /* Do nothing */ }
+	}
+  
+  //instantiate hubspot api client
+  const hubspotClient = new hubspot.Client({
+    accessToken: process.env.MEETING_COMPANY_CONTACT // <-- update with your secret key variable name. Found above the code section in the "Secrets" drop-down area on the hubspot interface.
+  });
+  
+  // get the company's properties
+  let getCompanyPropertiesPath = '/crm/v3/objects/companies/' + event.object.objectId + '?properties=pre_opp_count%2Cname%2Cnotes_last_updated&associations=meetings&archived=false';
+  pause(7000);
+  const getCompanyProperties = await hubspotClient.apiRequest({
+    method: 'GET',
+    path: getCompanyPropertiesPath
+  });
+  
+  pause(7000);
+  const getCompanyPropertiesJSON = await getCompanyProperties.json();
+  console.log(getCompanyPropertiesJSON);
+  
+  console.log(getCompanyPropertiesJSON.associations.meetings.results);
+  
+  if ( getCompanyPropertiesJSON.associations.meetings.results.length > 0 ) {
+    for (let i=0; i<getCompanyPropertiesJSON.associations.meetings.results.length; i++) {
+      // get meeting info
+      let getMeetingPropertiesPath = '/crm/v3/objects/meetings/' + getCompanyPropertiesJSON.associations.meetings.results[i].id + '?properties=hs_meeting_outcome&associations=contacts';
+      pause(7000);
+      const getMeetingProperties = await hubspotClient.apiRequest({
+        method: 'GET',
+        path: getMeetingPropertiesPath
+      });
+      
+      pause(7000);
+      const getMeetingPropertiesJSON = await getMeetingProperties.json();
+      console.log(getMeetingPropertiesJSON);
+      
+      // filter for properties.hs_meeting_outcome == 'GENERATE PRE-OPP' & has associations
+      if (getMeetingPropertiesJSON.properties.hs_meeting_outcome == 'GENERATE PRE-OPP' && getMeetingPropertiesJSON.associations.contacts.results.length > 0) {
+        // look through associations of meeting
+        console.log(getMeetingPropertiesJSON.associations.contacts.results)
+        
+        // get pre-opp deal 
+        
+        console.log(getCompanyPropertiesJSON.properties.notes_last_updated);
+        
+        let last_updated = new Date(getCompanyPropertiesJSON.properties.notes_last_updated);
+        let last_updated_string = last_updated.getDate() + '/' + (last_updated.getMonth() + 1).toString().padStart(2,'0') + '/' + last_updated.getFullYear();
+        console.log("stringified date: " + last_updated_string );
+        
+        let preOppDealName = '[Pre-Opp #' + getCompanyPropertiesJSON.properties.pre_opp_count + '] ' + getCompanyPropertiesJSON.properties.name +' - ' + last_updated_string;        
+        console.log(preOppDealName);
+        
+        let getPreOppDealPath = '/crm/v3/objects/deals/search';
+        
+        pause(7000);
+        const getPreOppDeal = await hubspotClient.apiRequest({
+          method: 'POST',
+          path: getPreOppDealPath,
+          body: {
+            "filterGroups": [
+              {
+                "filters": [
+                  {
+                    "value": preOppDealName,
+                    "propertyName": "dealname",
+                    "operator": "EQ"
+                  }
+                ]
+              }
+            ],
+            "sorts": [
+              "dealname"
+            ],
+            "properties": [
+              "dealname"
+            ],
+            "limit": 1,
+            "after": 0
+          }
+        });
+
+        const getPreOppDealJSON = await getPreOppDeal.json();
+        console.log(getPreOppDealJSON);
+        
+        // loop through associated contacts and associate them to the pre-opp deal
+        for ( let j = 0; j < getMeetingPropertiesJSON.associations.contacts.results.length; j++ ) {
+          let contactId = getMeetingPropertiesJSON.associations.contacts.results[j].id;
+          let dealId = getPreOppDealJSON.results[0].id;
+          console.log("Associating Contact #" + contactId + " with Deal #" + dealId );
+          
+          pause(7000);
+          await hubspotClient.crm.contacts.associationsApi.create(
+            contactId,
+            'deals',
+            dealId,
+            [
+              {
+                "associationCategory": "HUBSPOT_DEFINED",
+                "associationTypeId": 4 
+              }
+            ]
+          );
+        }        
+      }
+    }
+  }
+  
+  // you can define output fields within the JSON. These can be used in the rest of the workflow, but might not be necessary for your case.
+  callback({
+    outputFields: {
+     //
+    }
+  });
+}
