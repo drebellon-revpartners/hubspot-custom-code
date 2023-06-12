@@ -16,13 +16,13 @@ exports.main = async (event, callback) => {
   
   // get the company's properties
   let getCompanyPropertiesPath = '/crm/v3/objects/companies/' + event.object.objectId + '?properties=pre_opp_count%2Cname%2Cnotes_last_updated&associations=meetings&archived=false';
-  pause(7000);
+  pause(2000);
   const getCompanyProperties = await hubspotClient.apiRequest({
     method: 'GET',
     path: getCompanyPropertiesPath
   });
   
-  pause(7000);
+  pause(2000);
   const getCompanyPropertiesJSON = await getCompanyProperties.json();
   console.log(getCompanyPropertiesJSON);
   
@@ -32,13 +32,13 @@ exports.main = async (event, callback) => {
     for (let i=0; i<getCompanyPropertiesJSON.associations.meetings.results.length; i++) {
       // get meeting info
       let getMeetingPropertiesPath = '/crm/v3/objects/meetings/' + getCompanyPropertiesJSON.associations.meetings.results[i].id + '?properties=hs_meeting_outcome&associations=contacts';
-      pause(7000);
+      pause(2000);
       const getMeetingProperties = await hubspotClient.apiRequest({
         method: 'GET',
         path: getMeetingPropertiesPath
       });
       
-      pause(7000);
+      pause(2000);
       const getMeetingPropertiesJSON = await getMeetingProperties.json();
       console.log(getMeetingPropertiesJSON);
       
@@ -60,7 +60,7 @@ exports.main = async (event, callback) => {
         
         let getPreOppDealPath = '/crm/v3/objects/deals/search';
         
-        pause(7000);
+        pause(2000);
         const getPreOppDeal = await hubspotClient.apiRequest({
           method: 'POST',
           path: getPreOppDealPath,
@@ -96,7 +96,7 @@ exports.main = async (event, callback) => {
           let dealId = getPreOppDealJSON.results[0].id;
           console.log("Associating Contact #" + contactId + " with Deal #" + dealId );
           
-          pause(7000);
+          pause(2000);
           await hubspotClient.crm.contacts.associationsApi.create(
             contactId,
             'deals',
