@@ -1,0 +1,77 @@
+const hubspot = require('@hubspot/api-client');
+exports.main = async (event, callback) => {
+  
+  //instantiate hubspot api client
+  const hubspotClient = new hubspot.Client({
+    accessToken: process.env.CUSTOM_CODE_ALL // <-- update with your secret key variable name. Found above the code section in the "Secrets" drop-down area on the hubspot interface.
+  });
+  
+  // variables
+  let notes_list = [];
+  let emails_list = [];
+  let attachment_ids = [];
+  
+  const deal_owner = event.inputFields['hubspot_owner_id'];
+   /*****
+    Use inputs to get data from any action in your workflow and use it in your code instead of having to use the HubSpot API.
+  *****/
+  const email = event.inputFields['email'];
+  
+  
+  //
+  console.log(`Deal ID: ${event.object.objectId}`);
+  
+  const deals_notes_json = await (await hubspotClient.apiRequest({
+    method: 'GET',
+    path: `/crm/v4/objects/Deals/${event.object.objectId}/associations/notes?limit=500`
+  })).json();
+  
+  console.log(deals_notes_json);
+  // add all notes ids to list for batch api call
+  if (deals_notes_json.results.length > 0) {
+    for (let i=0; i<deals_notes_json.results.length; i++) {
+      notes_list.push({"id": deals_notes_json.results[i].toObjectId})
+    }
+    console.log(notes_list);
+    
+    // batch call for all notes
+    
+    const notes_info_json = await (await hubspotClient.apiRequest({
+      method: 'POST',
+      path: `/crm/v3/objects/notes/batch/read?archived=false`,
+      body: {
+        "properties": [
+          "hs_attachment_ids"
+        ],
+        "propertiesWithHistory": [
+          "record_id"
+        ],
+        "inputs": notes_list
+      }
+    })).json();
+    
+    console.log(notes_info_json);
+    // get all hs_attachment_ids
+    
+    for ( let j=0; j<notes_info_json.results.length; j++ ) {
+      if ( notes_info_json.results[j].properties.hs_attachment_ids) {
+        attachment_ids.push(notes_info_json.results[j].properties.hs_attachment_ids);
+      }
+    }
+  }
+  
+  
+  
+  
+  /*****
+    Use the callback function to output data that can be used in later actions in your workflow.
+  *****/
+  callback({
+    outputFields: {
+      email: email,
+      Attachment_1: attachment_ids[0] ? `https://app.hubspot.com/file-preview/9154210/file/${attachment_ids[0]}/` : "",
+      attachment_2: attachment_ids[1] ? `https://app.hubspot.com/file-preview/9154210/file/${attachment_ids[1]}/` : "",
+      attachment_3: attachment_ids[2] ? `https://app.hubspot.com/file-preview/9154210/file/${attachment_ids[2]}/` : ""
+    }
+  });
+}
