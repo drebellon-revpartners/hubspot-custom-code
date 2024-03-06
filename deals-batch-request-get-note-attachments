@@ -18,7 +18,7 @@ exports.main = async (event, callback) => {
   const email = event.inputFields['email'];
   
   
-  //
+  // Get enrolled deal's notes via API
   console.log(`Deal ID: ${event.object.objectId}`);
   
   const deals_notes_json = await (await hubspotClient.apiRequest({
@@ -27,6 +27,7 @@ exports.main = async (event, callback) => {
   })).json();
   
   console.log(deals_notes_json);
+
   // add all notes ids to list for batch api call
   if (deals_notes_json.results.length > 0) {
     for (let i=0; i<deals_notes_json.results.length; i++) {
@@ -35,7 +36,6 @@ exports.main = async (event, callback) => {
     console.log(notes_list);
     
     // batch call for all notes
-    
     const notes_info_json = await (await hubspotClient.apiRequest({
       method: 'POST',
       path: `/crm/v3/objects/notes/batch/read?archived=false`,
